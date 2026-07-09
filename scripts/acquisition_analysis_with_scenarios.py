@@ -47,6 +47,22 @@ starts_df['start_date'] = pd.to_datetime(starts_df['start_date'])
 # Attribute starts to visits using customer_id (for sample)
 starts_mapped = starts_df.merge(visits_df[['customer_id','campaign_id','channel','product','visit_date']], on='customer_id', how='left')
 
+# Normalize overlapping columns created by the merge (pandas creates _x/_y if both frames had same column names).
+# Prefer the visit-side attribution (the visit's channel/campaign/product) when available.
+for col in ['channel', 'campaign_id', 'product']:
+    col_x = f"{col}_x"
+    col_y = f"{col}_y"
+    if col_y in starts_mapped.columns and col_x in starts_mapped.columns:
+        starts_mapped[col] = starts_mapped[col_y].fillna(starts_mapped[col_x])
+        starts_mapped = starts_mapped.drop(columns=[col_x, col_y])
+    elif col_y in starts_mapped.columns:
+        starts_mapped[col] = starts_mapped[col_y]
+        starts_mapped = starts_mapped.drop(columns=[col_y])
+    elif col_x in starts_mapped.columns:
+        starts_mapped[col] = starts_mapped[col_x]
+        starts_mapped = starts_mapped.drop(columns=[col_x])
+# If neither _x/_y exist but 'channel' already exists, nothing to do.
+
 # Funnel aggregations
 visits_by_channel = visits_df.groupby('channel', as_index=False)['visit_count'].sum().rename(columns={'visit_count':'visits'})
 starts_by_channel = starts_mapped.groupby('channel', as_index=False)['application_id'].nunique().rename(columns={'application_id':'starts'})
