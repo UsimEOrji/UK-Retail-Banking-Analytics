@@ -1,0 +1,88 @@
+name: Generate Acquisition PPTX
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Commit PPTX to repo? (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show repo files (debug)
+        run: |
+          echo "=== Repo tree ==="
+          ls -la
+          echo "=== .github files ==="
+          ls -la .github || true
+          echo "=== scripts dir ==="
+          ls -la scripts || true
+
+      - name: Install system packages required for Pillow / lxml
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev libpng-dev libxml2-dev libxslt1-dev libffi-dev python3-dev
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade wheel
+          pip install pandas numpy matplotlib seaborn python-pptx openpyxl pillow lxml
+
+      - name: List python packages (debug)
+        run: pip list
+
+      - name: Run analysis script
+        run: |
+          set -eux
+          python scripts/acquisition_analysis_with_scenarios.py
+        working-directory: ${{ github.workspace }}
+
+      - name: Show output dir (debug)
+        run: |
+          echo "=== output dir listing ==="
+          ls -la output || true
+          echo "=== docs dir listing ==="
+          ls -la docs || true
+
+      - name: Build presentation
+        run: |
+          set -eux
+          python scripts/make_presentation.py
+        working-directory: ${{ github.workspace }}
+
+      - name: Show docs dir after presentation build
+        run: |
+          echo "=== docs dir listing (post) ==="
+          ls -la docs || true
+          echo "=== Check PPTX file ==="
+          file docs/Acquisition_Insights.pptx || true
+          stat -c "%n %s" docs/Acquisition_Insights.pptx || true
+
+      - name: Upload PPTX as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Acquisition_Insights
+          path: docs/Acquisition_Insights.pptx
+
+      - name: Commit generated PPTX (optional)
+        if: ${{ github.event.inputs.commit == 'true' }}
+        uses: EndBug/add-and-commit@v9
+        with:
+          author_name: 'github-actions[bot]'
+          author_email: '41898282+github-actions[bot]@users.noreply.github.com'
+          message: 'chore: add generated Acquisition_Insights.pptx'
+          add: 'docs/Acquisition_Insights.pptx'
+          signoff: false
